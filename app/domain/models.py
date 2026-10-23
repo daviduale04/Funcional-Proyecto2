@@ -1,8 +1,22 @@
-#Hola mundo
-from dataclasses import dataclass
+#Hola mundos 
+from dataclasses import dataclass, replace
 from enum import Enum
-from typing import Optional
+from typing import Generic, Optional, TypeVar
 
+# Contenedor funcional para manejo de errores sin excepciones
+T = TypeVar("T")
+
+@dataclass(frozen=True)
+class Ok(Generic[T]):
+    value: T
+
+@dataclass(frozen=True)
+class Err:
+    error: str
+
+Result = Ok[T] | Err
+
+# Enumeraciones de dominio
 class EstadoTarea(str, Enum):
     PENDIENTE = "Pendiente"
     EN_PROGRESO = "En progreso"
@@ -14,6 +28,7 @@ class Prioridad(str, Enum):
     MEDIA = "Media"
     ALTA = "Alta"
 
+# Entidades inmutables
 @dataclass(frozen=True)
 class Integrante:
     id: int
