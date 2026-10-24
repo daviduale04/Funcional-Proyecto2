@@ -1,12 +1,12 @@
 import sqlite3
 from typing import Optional
+from app.adapters.decorators import medir_tiempo_db
 from app.domain.models import EstadoTarea, Integrante, Prioridad, Proyecto, Tarea, EntregableEDT
 
-# Ruta predeterminada de la base de datos local SQLite
 DB_PATH = "gestor_proyectos.db"
 
 def init_db(db_path: str = DB_PATH) -> None:
-    """Crea las tablas iniciales en SQLite y precarga datos completos de prueba."""
+    """Crea las tablas iniciales en SQLite y precarga datos iniciales si está vacía."""
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -46,30 +46,28 @@ def init_db(db_path: str = DB_PATH) -> None:
         cursor.execute("SELECT COUNT(*) FROM tareas")
         if cursor.fetchone()[0] == 0:
             cursor.execute("INSERT INTO proyectos (nombre, descripcion) VALUES (?, ?)", 
-                           ("Gestor de Proyectos", "Sistema de Planificación EDT y Kanban"))
+                           ("Gestor Funcional", "Sistema de Planificación EDT y Kanban"))
             
-            # Integrantes
-            cursor.execute("INSERT INTO integrantes (id, nombre, rol) VALUES (1, 'Marta Ruiz', 'Desarrolladora')")
-            cursor.execute("INSERT INTO integrantes (id, nombre, rol) VALUES (2, 'Luis Gómez', 'Analista')")
-            cursor.execute("INSERT INTO integrantes (id, nombre, rol) VALUES (3, 'Ana Torres', 'Arquitecta')")
+            cursor.execute("INSERT INTO integrantes (id, nombre, rol) VALUES (1, 'David Guale', 'Desarrollador Core')")
+            cursor.execute("INSERT INTO integrantes (id, nombre, rol) VALUES (2, 'Marta Ruiz', 'Analista de Negocio')")
+            cursor.execute("INSERT INTO integrantes (id, nombre, rol) VALUES (3, 'Ana Torres', 'Arquitecta de Software')")
 
-            # Entregables EDT
-            cursor.execute("INSERT INTO entregables (id, id_proyecto, nombre, descripcion) VALUES (1, 1, 'Entregable #1', 'Definición y requisitos')")
-            cursor.execute("INSERT INTO entregables (id, id_proyecto, nombre, descripcion) VALUES (2, 1, 'Entregable #2', 'Diseño e implementación')")
-            cursor.execute("INSERT INTO entregables (id, id_proyecto, nombre, descripcion) VALUES (3, 1, 'Entregable #3', 'Pruebas y documentación')")
+            cursor.execute("INSERT INTO entregables (id, id_proyecto, nombre, descripcion) VALUES (1, 1, '1.0 Alcance y Arquitectura', 'Definición de modelos inmutables')")
+            cursor.execute("INSERT INTO entregables (id, id_proyecto, nombre, descripcion) VALUES (2, 1, '2.0 Núcleo Funcional', 'Reglas puras, closures y transiciones')")
+            cursor.execute("INSERT INTO entregables (id, id_proyecto, nombre, descripcion) VALUES (3, 1, '3.0 Shell e Interfaz', 'Persistencia SQLite y componentes ReactPy')")
 
-            # Tareas precargadas
             cursor.execute("""
                 INSERT INTO tareas (id_entregable, titulo, descripcion, responsable_id, prioridad, estado) VALUES
-                (1, 'Definir alcance del proyecto', 'Reunión de kickoff y alcance', 3, 'Alta', 'Terminada'),
-                (1, 'Levantar requisitos funcionales', 'Casos de uso y reglas de negocio', 3, 'Media', 'En revisión'),
-                (2, 'Diseñar modelo de datos', 'Esquema relacional e inmutabilidad', 2, 'Alta', 'En progreso'),
-                (2, 'Implementar tablero Kanban', 'Componentes visuales y eventos', 2, 'Alta', 'En progreso'),
-                (3, 'Crear pruebas de transición', 'Verificar reglas del Functional Core', 1, 'Media', 'Pendiente'),
-                (3, 'Documentar funcionamiento', 'Redactar informe y evidencias', 3, 'Baja', 'Pendiente')
+                (1, 'Definir alcance del proyecto', 'Kickoff y especificación de requisitos', 3, 'Alta', 'Terminada'),
+                (1, 'Modelar entidades inmutables', 'Creación de dataclasses frozen en domain', 1, 'Alta', 'En revisión'),
+                (2, 'Implementar motor de transiciones', 'Pattern matching para control Kanban', 1, 'Alta', 'En progreso'),
+                (2, 'Diseñar closures de filtrado', 'Filtros combinables por responsable y estado', 2, 'Media', 'En progreso'),
+                (3, 'Crear vistas ReactPy', 'Tablero dinámico y vista EDT jerárquica', 1, 'Media', 'Pendiente'),
+                (3, 'Elaborar suite de pruebas', 'Tests unitarios con pytest', 2, 'Baja', 'Pendiente')
             """)
         conn.commit()
 
+@medir_tiempo_db
 def listar_tareas(db_path: str = DB_PATH) -> list[Tarea]:
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
@@ -99,18 +97,27 @@ def listar_integrantes(db_path: str = DB_PATH) -> list[Integrante]:
         cursor.execute("SELECT id, nombre, rol FROM integrantes")
         return [Integrante(id=r[0], nombre=r[1], rol=r[2]) for r in cursor.fetchall()]
 
-def insertar_tarea(tarea: Tarea, db_path: str = DB_PATH) -> int:
+@medir_tiempo_db
+def insertar_tarea_db(id_entregable: int, titulo: str, descripcion: str, responsable_id: Optional[int], prioridad: Prioridad, db_path: str = DB_PATH) -> int:
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO tareas (id_entregable, titulo, descripcion, responsable_id, prioridad, estado)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (tarea.id_entregable, tarea.titulo, tarea.descripcion, tarea.responsable_id, tarea.prioridad.value, tarea.estado.value))
+            VALUES (?, ?, ?, ?, ?, 'Pendiente')
+        """, (id_entregable, titulo, descripcion, responsable_id, prioridad.value))
         conn.commit()
-        return cursor.lastrowid
+        return cursor.lastrowid or 0
 
+@medir_tiempo_db
 def actualizar_estado_tarea_db(id_tarea: int, nuevo_estado: EstadoTarea, db_path: str = DB_PATH) -> None:
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
         cursor.execute("UPDATE tareas SET estado = ? WHERE id = ?", (nuevo_estado.value, id_tarea))
+        conn.commit()
+
+@medir_tiempo_db
+def eliminar_tarea_db(id_tarea: int, db_path: str = DB_PATH) -> None:
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM tareas WHERE id = ?", (id_tarea,))
         conn.commit()
